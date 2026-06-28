@@ -2,56 +2,85 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  ScatterChart, Scatter, Cell, LineChart, Line, CartesianGrid, Legend,
-  RadarChart, PolarGrid, PolarAngleAxis, Radar,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  ScatterChart,
+  Scatter,
+  Cell,
+  CartesianGrid,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  Radar,
 } from 'recharts'
+
 import { StatusBadge } from '@/components/StatusBadge'
 import { MetricCard } from '@/components/MetricCard'
 import { ForecastBar } from '@/components/ForecastBar'
-import { COUNTRIES, REGION_COLORS } from '@/lib/countries'
+import { COUNTRIES } from '@/lib/countries'
 import type { CountryWorkforceScored } from '@/lib/eurostat'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type SortKey = 'totalPhysicians' | 'retirementCliffScore' | 'pipelineRatio' | 'shortageRisk'
-type View = 'table' | 'chart' | 'detail'
+type SortKey =
+  | 'totalPhysicians'
+  | 'retirementCliffScore'
+  | 'pipelineRatio'
+  | 'shortageRisk'
 
-const RISK_ORDER = { CRITICAL: 0, HIGH: 1, MODERATE: 2, LOW: 3, UNKNOWN: 4 }
+type View = 'table' | 'chart'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const RISK_ORDER = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MODERATE: 2,
+  LOW: 3,
+  UNKNOWN: 4,
+}
+
+const RISK_COLORS: Record<string, string> = {
+  CRITICAL: '#dc2626',
+  HIGH: '#ea580c',
+  MODERATE: '#ca8a04',
+  LOW: '#16a34a',
+  UNKNOWN: '#64748b',
+}
+
 function fmt(v: number | null, dp = 1) {
   return v !== null && v !== undefined ? v.toFixed(dp) : '—'
 }
 
 function RiskDot({ risk }: { risk: string }) {
-  const colors: Record<string, string> = {
-    CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#eab308', LOW: '#10b981', UNKNOWN: '#52525b',
-  }
   return (
     <span
-      className="inline-block w-2 h-2 rounded-full mr-2"
-      style={{ background: colors[risk] ?? '#52525b' }}
+      className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
+      style={{ background: RISK_COLORS[risk] ?? RISK_COLORS.UNKNOWN }}
     />
   )
 }
 
-// ─── Custom Tooltip ───────────────────────────────────────────────────────────
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
+
   return (
-    <div className="bg-zinc-900 border border-white/10 p-3 text-xs font-mono">
-      <div className="text-zinc-400 mb-1.5 tracking-wider">{label}</div>
-      {payload.map((p: any) => (
-        <div key={p.name} className="flex justify-between gap-4">
-          <span style={{ color: p.color }}>{p.name}</span>
-          <span className="text-zinc-200">{typeof p.value === 'number' ? p.value.toFixed(1) : p.value}</span>
-        </div>
-      ))}
+    <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-lg">
+      <div className="mb-2 font-semibold text-slate-900">{label}</div>
+      <div className="space-y-1">
+        {payload.map((p: any) => (
+          <div key={p.name} className="flex justify-between gap-8">
+            <span className="text-slate-500">{p.name}</span>
+            <span className="font-semibold text-slate-900">
+              {typeof p.value === 'number' ? p.value.toFixed(1) : p.value}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Home() {
   const [data, setData] = useState<CountryWorkforceScored[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,29 +95,28 @@ export default function Home() {
   const [filterRisk, setFilterRisk] = useState<string>('ALL')
   const [syncing, setSyncing] = useState(false)
 
-  // Fetch data
   useEffect(() => {
     fetch('/api/workforce')
-      .then(r => r.json())
-      .then(json => {
+      .then((r) => r.json())
+      .then((json) => {
         if (json.error) throw new Error(json.error)
         setData(json.data)
         setSource(json.source)
         setSyncedAt(json.syncedAt)
       })
-      .catch(e => setError(e.message))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
 
-  // Manual sync trigger
   async function triggerSync() {
     setSyncing(true)
+
     try {
       const res = await fetch('/api/sync/workforce', { method: 'GET' })
       const json = await res.json()
+
       if (json.success) {
-        // Refetch
-        const d = await fetch('/api/workforce').then(r => r.json())
+        const d = await fetch('/api/workforce').then((r) => r.json())
         setData(d.data)
         setSource(d.source)
         setSyncedAt(d.syncedAt)
@@ -98,37 +126,48 @@ export default function Home() {
     }
   }
 
-  // Sorted + filtered data
   const sorted = useMemo(() => {
     let rows = [...data]
-    if (filterRisk !== 'ALL') rows = rows.filter(r => r.shortageRisk === filterRisk)
+
+    if (filterRisk !== 'ALL') {
+      rows = rows.filter((r) => r.shortageRisk === filterRisk)
+    }
+
     rows.sort((a, b) => {
       if (sortKey === 'shortageRisk') {
-        return sortDir * (RISK_ORDER[a.shortageRisk] - RISK_ORDER[b.shortageRisk])
+        return (
+          sortDir *
+          (RISK_ORDER[a.shortageRisk] - RISK_ORDER[b.shortageRisk])
+        )
       }
+
       const av = a[sortKey] ?? -Infinity
       const bv = b[sortKey] ?? -Infinity
+
       return sortDir * ((av as number) - (bv as number))
     })
+
     return rows
   }, [data, sortKey, sortDir, filterRisk])
 
-  const selectedCountry = data.find(d => d.code === selected)
+  const selectedCountry = data.find((d) => d.code === selected)
 
-  // Summary stats
-  const criticalCount = data.filter(d => d.shortageRisk === 'CRITICAL').length
-  const highCount = data.filter(d => d.shortageRisk === 'HIGH').length
-  const avgCliff = data.filter(d => d.retirementCliffScore !== null)
+  const criticalCount = data.filter((d) => d.shortageRisk === 'CRITICAL').length
+  const highCount = data.filter((d) => d.shortageRisk === 'HIGH').length
+
+  const avgCliff = data.filter((d) => d.retirementCliffScore !== null)
   const avgCliffScore = avgCliff.length
-    ? Math.round(avgCliff.reduce((s, d) => s + d.retirementCliffScore!, 0) / avgCliff.length)
+    ? Math.round(
+        avgCliff.reduce((s, d) => s + d.retirementCliffScore!, 0) /
+          avgCliff.length
+      )
     : null
 
-  // Chart data
   const cliffChartData = [...data]
-    .filter(d => d.retirementCliffScore !== null)
+    .filter((d) => d.retirementCliffScore !== null)
     .sort((a, b) => b.retirementCliffScore! - a.retirementCliffScore!)
     .slice(0, 20)
-    .map(d => ({
+    .map((d) => ({
       name: d.code,
       cliff: d.retirementCliffScore,
       pipeline: d.pipelineRatio,
@@ -136,42 +175,41 @@ export default function Home() {
     }))
 
   function handleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(d => (d === 1 ? -1 : 1))
-    else { setSortKey(key); setSortDir(1) }
+    if (sortKey === key) {
+      setSortDir((d) => (d === 1 ? -1 : 1))
+    } else {
+      setSortKey(key)
+      setSortDir(1)
+    }
   }
 
   function SortHeader({ label, k }: { label: string; k: SortKey }) {
     const active = sortKey === k
+
     return (
       <th
-        className="text-left text-[9px] font-mono tracking-widest text-zinc-500 uppercase pb-2 cursor-pointer hover:text-zinc-300 select-none"
+        className="cursor-pointer select-none px-4 py-4 text-left text-sm font-semibold text-slate-500 transition hover:text-slate-900"
         onClick={() => handleSort(k)}
       >
         {label}
-        {active && <span className="ml-1 text-zinc-400">{sortDir === 1 ? '↑' : '↓'}</span>}
+        {active && (
+          <span className="ml-2 text-slate-400">
+            {sortDir === 1 ? 'Asc' : 'Desc'}
+          </span>
+        )}
       </th>
     )
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center space-y-4">
-          <div className="text-[10px] font-mono tracking-[0.3em] text-emerald-400 animate-pulse-slow uppercase">
-            Fetching Eurostat workforce data...
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="mb-3 text-base font-semibold text-slate-900">
+            Loading workforce data
           </div>
-          <div className="flex gap-1 justify-center">
-            {[0,1,2,3,4].map(i => (
-              <div
-                key={i}
-                className="w-1 bg-zinc-700 rounded-full"
-                style={{
-                  height: `${16 + i * 8}px`,
-                  animation: `pulse ${0.8 + i * 0.15}s ease infinite`,
-                }}
-              />
-            ))}
+          <div className="text-sm text-slate-500">
+            Fetching the latest Eurostat indicators.
           </div>
         </div>
       </div>
@@ -180,434 +218,621 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center space-y-2">
-          <div className="text-red-400 font-mono text-sm">Failed to load data</div>
-          <div className="text-zinc-600 font-mono text-xs">{error}</div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="rounded-2xl border border-red-100 bg-white p-8 text-center shadow-sm">
+          <div className="mb-2 text-lg font-semibold text-red-700">
+            Failed to load data
+          </div>
+          <div className="text-sm text-slate-500">{error}</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="noise min-h-screen relative">
-      <div className="relative z-10">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-5">
+          <div>
+            <div className="mb-1 text-sm font-medium text-slate-500">
+              Eurostat · EU/EEA Healthcare Workforce Intelligence
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
+              European Physician Workforce Crisis Monitor
+            </h1>
+          </div>
 
-        {/* ── Header ────────────────────────────────────────────── */}
-        <header className="border-b border-white/5 bg-zinc-950/80 backdrop-blur sticky top-0 z-50">
-          <div className="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div>
-              <div className="text-[9px] font-mono tracking-[0.25em] text-emerald-400 uppercase mb-1">
-                LIVE · Eurostat API · EU/EEA Healthcare
+          <div className="flex items-center gap-4">
+            <div className="hidden text-right sm:block">
+              <div className="text-xs font-medium text-slate-400">
+                Data source
               </div>
-              <h1 className="font-serif text-xl font-light tracking-tight text-zinc-100">
-                European Physician Workforce Crisis Monitor
-              </h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-[9px] font-mono text-zinc-600 uppercase tracking-wider">Data source</div>
-                <div className="text-[10px] font-mono text-zinc-400">
-                  {source === 'database' ? '🗄 Supabase cache' : source === 'curated' ? ' Eurostat 2023' : ' Live Eurostat'}
-                </div>
-                {syncedAt && (
-                  <div className="text-[9px] font-mono text-zinc-600">
-                    {new Date(syncedAt).toLocaleDateString()}
-                  </div>
-                )}
+              <div className="text-sm font-semibold text-slate-700">
+                {source === 'database'
+                  ? 'Supabase cache'
+                  : source === 'curated'
+                    ? 'Eurostat 2023'
+                    : 'Live Eurostat'}
               </div>
-              <button
-                onClick={triggerSync}
-                disabled={syncing}
-                className="text-[9px] font-mono tracking-widest uppercase px-3 py-1.5 border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 transition-colors disabled:opacity-40"
-              >
-                {syncing ? 'Syncing...' : '↻ Refresh'}
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-screen-2xl mx-auto px-6 py-8 space-y-8">
-
-          {/* ── KPI Row ───────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger">
-            <MetricCard
-              label="Countries Tracked"
-              value={data.length}
-              unit="EU/EEA states"
-              accent="#00d4aa"
-            />
-            <MetricCard
-              label="Critical Risk"
-              value={criticalCount}
-              unit="countries"
-              sub="Immediate intervention needed"
-              accent="#ef4444"
-            />
-            <MetricCard
-              label="High Risk"
-              value={highCount}
-              unit="countries"
-              sub="Monitoring required"
-              accent="#f97316"
-            />
-            <MetricCard
-              label="Avg Retirement Cliff"
-              value={avgCliffScore}
-              unit="% over 55"
-              sub="EU median"
-              accent="#eab308"
-            />
-          </div>
-
-          {/* ── View Toggle + Filter ──────────────────────────────── */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex gap-1">
-              {(['table', 'chart'] as View[]).map(v => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={`text-[9px] font-mono tracking-widest uppercase px-3 py-1.5 border transition-colors ${
-                    view === v
-                      ? 'border-emerald-500/50 text-emerald-400 bg-emerald-950/40'
-                      : 'border-white/10 text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  {v === 'table' ? '☰ Country Table' : '▦ Charts'}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-1 flex-wrap">
-              {['ALL', 'CRITICAL', 'HIGH', 'MODERATE', 'LOW'].map(r => (
-                <button
-                  key={r}
-                  onClick={() => setFilterRisk(r)}
-                  className={`text-[9px] font-mono tracking-widest uppercase px-3 py-1.5 border transition-colors ${
-                    filterRisk === r
-                      ? 'border-white/20 text-zinc-200 bg-zinc-800'
-                      : 'border-white/5 text-zinc-600 hover:text-zinc-400'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Main Content ──────────────────────────────────────── */}
-          <div className={`grid gap-6 ${selected ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1'}`}>
-
-            {/* Table or Charts */}
-            <div className={selected ? 'lg:col-span-2' : 'col-span-1'}>
-              {view === 'table' ? (
-                <div className="border border-white/5 overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-white/5 bg-zinc-950/60 px-4">
-                        <th className="text-left text-[9px] font-mono tracking-widest text-zinc-500 uppercase pb-2 pt-3 pl-4">Country</th>
-                        <th className="text-left text-[9px] font-mono tracking-widest text-zinc-500 uppercase pb-2 pt-3">Risk</th>
-                        <SortHeader label="Physicians /100k" k="totalPhysicians" />
-                        <SortHeader label="Cliff %" k="retirementCliffScore" />
-                        <SortHeader label="Pipeline" k="pipelineRatio" />
-                        <th className="text-left text-[9px] font-mono tracking-widest text-zinc-500 uppercase pb-2 pt-3">10yr Outlook</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sorted.map(country => {
-                        const meta = COUNTRIES[country.code]
-                        return (
-                          <tr
-                            key={country.code}
-                            className={`country-row ${selected === country.code ? 'selected' : ''}`}
-                            onClick={() => setSelected(selected === country.code ? null : country.code)}
-                          >
-                            <td className="py-3 pl-4 pr-2">
-                              <div className="font-serif text-sm text-zinc-200">{meta?.name ?? country.code}</div>
-                              <div className="text-[9px] font-mono text-zinc-600 mt-0.5">
-                                {meta?.region ?? ''}
-                              </div>
-                            </td>
-                            <td className="py-3 pr-4">
-                              <StatusBadge risk={country.shortageRisk} />
-                            </td>
-                            <td className="py-3 pr-4 font-mono text-sm text-zinc-300">
-                              {fmt(country.totalPhysicians)}
-                            </td>
-                            <td className="py-3 pr-4">
-                              <div className="flex items-center gap-2">
-                                <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                      width: `${Math.min(country.retirementCliffScore ?? 0, 100)}%`,
-                                      background: (country.retirementCliffScore ?? 0) > 40 ? '#ef4444' : '#eab308',
-                                    }}
-                                  />
-                                </div>
-                                <span className="font-mono text-xs text-zinc-400">
-                                  {fmt(country.retirementCliffScore, 0)}%
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-3 pr-4 font-mono text-xs text-zinc-400">
-                              {fmt(country.pipelineRatio)}
-                            </td>
-                            <td className="py-3 pr-4">
-                              {country.projectedShortfall10yr !== null ? (
-                                <span
-                                  className="font-mono text-xs"
-                                  style={{
-                                    color: country.projectedShortfall10yr > 0 ? '#ef4444' : '#10b981',
-                                  }}
-                                >
-                                  {country.projectedShortfall10yr > 0 ? '▼' : '▲'}{' '}
-                                  {Math.abs(country.projectedShortfall10yr)}%
-                                </span>
-                              ) : (
-                                <span className="font-mono text-xs text-zinc-700">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                  <div className="border-t border-white/5 px-4 py-2 text-[9px] font-mono text-zinc-700">
-                    {sorted.length} countries · Click row to drill down
-                  </div>
-                </div>
-              ) : (
-                /* Charts View */
-                <div className="space-y-6">
-                  {/* Retirement Cliff Bar */}
-                  <div className="border border-white/5 p-5">
-                    <div className="text-[9px] font-mono tracking-[0.2em] text-zinc-500 uppercase mb-4">
-                      Retirement Cliff Score — % of Physicians Aged 55+
-                    </div>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <BarChart data={cliffChartData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                        <CartesianGrid strokeDasharray="2 4" stroke="#1f1f2e" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fill: '#52525b', fontSize: 10, fontFamily: 'DM Mono' }} />
-                        <YAxis tick={{ fill: '#52525b', fontSize: 10, fontFamily: 'DM Mono' }} />
-                        <Tooltip content={<ChartTooltip />} />
-                        <Bar dataKey="cliff" name="% over 55" radius={[2, 2, 0, 0]}>
-                          {cliffChartData.map((d, i) => (
-                            <Cell
-                              key={i}
-                              fill={
-                                d.risk === 'CRITICAL' ? '#ef4444' :
-                                d.risk === 'HIGH' ? '#f97316' :
-                                d.risk === 'MODERATE' ? '#eab308' : '#10b981'
-                              }
-                              opacity={0.8}
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Pipeline vs Cliff Scatter */}
-                  <div className="border border-white/5 p-5">
-                    <div className="text-[9px] font-mono tracking-[0.2em] text-zinc-500 uppercase mb-4">
-                      Pipeline Ratio vs Retirement Cliff — Risk Quadrant
-                    </div>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <ScatterChart margin={{ top: 10, right: 20, bottom: 10, left: -10 }}>
-                        <CartesianGrid strokeDasharray="2 4" stroke="#1f1f2e" />
-                        <XAxis
-                          dataKey="cliff"
-                          name="Retirement Cliff %"
-                          tick={{ fill: '#52525b', fontSize: 10, fontFamily: 'DM Mono' }}
-                          label={{ value: 'Retirement Cliff %', position: 'insideBottom', offset: -5, fill: '#3f3f5a', fontSize: 9, fontFamily: 'DM Mono' }}
-                        />
-                        <YAxis
-                          dataKey="pipeline"
-                          name="Pipeline Ratio"
-                          tick={{ fill: '#52525b', fontSize: 10, fontFamily: 'DM Mono' }}
-                        />
-                        <Tooltip
-                          cursor={{ strokeDasharray: '3 3', stroke: '#3f3f5a' }}
-                          content={({ active, payload }) => {
-                            if (!active || !payload?.length) return null
-                            const d = payload[0].payload
-                            return (
-                              <div className="bg-zinc-900 border border-white/10 p-3 text-xs font-mono">
-                                <div className="text-zinc-300 font-bold mb-1">{d.name}</div>
-                                <div className="text-zinc-500">Cliff: {d.cliff?.toFixed(1)}%</div>
-                                <div className="text-zinc-500">Pipeline: {d.pipeline?.toFixed(1)}</div>
-                              </div>
-                            )
-                          }}
-                        />
-                        <Scatter
-                          data={cliffChartData}
-                          fill="#00d4aa"
-                        >
-                          {cliffChartData.map((d, i) => (
-                            <Cell
-                              key={i}
-                              fill={
-                                d.risk === 'CRITICAL' ? '#ef4444' :
-                                d.risk === 'HIGH' ? '#f97316' :
-                                d.risk === 'MODERATE' ? '#eab308' : '#10b981'
-                              }
-                            />
-                          ))}
-                        </Scatter>
-                      </ScatterChart>
-                    </ResponsiveContainer>
-                    <div className="flex gap-4 mt-3 flex-wrap">
-                      {['CRITICAL','HIGH','MODERATE','LOW'].map(r => (
-                        <div key={r} className="flex items-center gap-1.5 text-[9px] font-mono text-zinc-500">
-                          <RiskDot risk={r} />
-                          {r}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {syncedAt && (
+                <div className="text-xs text-slate-400">
+                  {new Date(syncedAt).toLocaleDateString()}
                 </div>
               )}
             </div>
 
-            {/* ── Detail Panel ────────────────────────────────────── */}
-            {selected && selectedCountry && (
-              <div className="border border-white/5 bg-zinc-950/40 p-6 space-y-6 animate-fade-up">
-                {/* Header */}
-                <div className="border-b border-white/5 pb-4">
-                  <div className="flex items-start justify-between mb-1">
-                    <div>
-                      <div className="text-[9px] font-mono text-zinc-600 tracking-widest uppercase mb-1">
-                        Selected · {COUNTRIES[selected]?.region ?? ''} Europe
-                      </div>
-                      <h2 className="font-serif text-2xl font-light text-zinc-100">
-                        {COUNTRIES[selected]?.name ?? selected}
-                      </h2>
-                    </div>
-                    <button
-                      onClick={() => setSelected(null)}
-                      className="text-zinc-600 hover:text-zinc-400 text-lg"
+            <button
+              onClick={triggerSync}
+              disabled={syncing}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+            >
+              {syncing ? 'Refreshing' : 'Refresh data'}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-screen-2xl space-y-8 px-6 py-8">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="Countries tracked"
+            value={data.length}
+            unit="EU/EEA states"
+            accent="#2563eb"
+          />
+          <MetricCard
+            label="Critical risk"
+            value={criticalCount}
+            unit="countries"
+            sub="Immediate intervention needed"
+            accent="#dc2626"
+          />
+          <MetricCard
+            label="High risk"
+            value={highCount}
+            unit="countries"
+            sub="Monitoring required"
+            accent="#ea580c"
+          />
+          <MetricCard
+            label="Avg retirement cliff"
+            value={avgCliffScore}
+            unit="% over 55"
+            sub="EU median"
+            accent="#ca8a04"
+          />
+        </section>
+
+        <section className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex gap-2 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+            {(['table', 'chart'] as View[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  view === v
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                {v === 'table' ? 'Country table' : 'Charts'}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {['ALL', 'CRITICAL', 'HIGH', 'MODERATE', 'LOW'].map((r) => (
+              <button
+                key={r}
+                onClick={() => setFilterRisk(r)}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                  filterRisk === r
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900'
+                }`}
+              >
+                {r === 'ALL'
+                  ? 'All'
+                  : r.charAt(0) + r.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section
+          className={`grid gap-6 ${
+            selected ? 'grid-cols-1 xl:grid-cols-3' : 'grid-cols-1'
+          }`}
+        >
+          <div className={selected ? 'xl:col-span-2' : 'col-span-1'}>
+            {view === 'table' ? (
+              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50">
+                      <th className="px-5 py-4 text-left text-sm font-semibold text-slate-500">
+                        Country
+                      </th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-500">
+                        Risk
+                      </th>
+                      <SortHeader
+                        label="Physicians /100k"
+                        k="totalPhysicians"
+                      />
+                      <SortHeader label="Cliff %" k="retirementCliffScore" />
+                      <SortHeader label="Pipeline" k="pipelineRatio" />
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-500">
+                        10-year outlook
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {sorted.map((country) => {
+                      const meta = COUNTRIES[country.code]
+
+                      return (
+                        <tr
+                          key={country.code}
+                          className={`country-row ${
+                            selected === country.code ? 'selected' : ''
+                          }`}
+                          onClick={() =>
+                            setSelected(
+                              selected === country.code ? null : country.code
+                            )
+                          }
+                        >
+                          <td className="px-5 py-4">
+                            <div className="text-base font-semibold text-slate-900">
+                              {meta?.name ?? country.code}
+                            </div>
+                            <div className="mt-1 text-sm text-slate-400">
+                              {meta?.region ?? ''}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <StatusBadge risk={country.shortageRisk} />
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-slate-700">
+                            {fmt(country.totalPhysicians)}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{
+                                    width: `${Math.min(
+                                      country.retirementCliffScore ?? 0,
+                                      100
+                                    )}%`,
+                                    background:
+                                      (country.retirementCliffScore ?? 0) > 40
+                                        ? '#dc2626'
+                                        : '#ca8a04',
+                                  }}
+                                />
+                              </div>
+                              <span className="text-sm font-semibold text-slate-600">
+                                {fmt(country.retirementCliffScore, 0)}%
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-slate-600">
+                            {fmt(country.pipelineRatio)}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            {country.projectedShortfall10yr !== null ? (
+                              <span
+                                className="text-sm font-semibold"
+                                style={{
+                                  color:
+                                    country.projectedShortfall10yr > 0
+                                      ? '#dc2626'
+                                      : '#16a34a',
+                                }}
+                              >
+                                {country.projectedShortfall10yr > 0
+                                  ? 'Shortfall'
+                                  : 'Surplus'}{' '}
+                                {Math.abs(country.projectedShortfall10yr)}%
+                              </span>
+                            ) : (
+                              <span className="text-sm text-slate-300">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+
+                <div className="border-t border-slate-200 px-5 py-4 text-sm text-slate-400">
+                  {sorted.length} countries shown. Select a row to view the
+                  country profile.
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-5">
+                    <h2 className="text-lg font-bold text-slate-900">
+                      Retirement cliff score
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Share of physicians aged 55 and older.
+                    </p>
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart
+                      data={cliffChartData}
+                      margin={{ top: 0, right: 0, bottom: 0, left: -20 }}
                     >
-                      ×
-                    </button>
-                  </div>
-                  <StatusBadge risk={selectedCountry.shortageRisk} />
-                </div>
-
-                {/* Core metrics */}
-                <div className="grid grid-cols-2 gap-2">
-                  <MetricCard
-                    label="Physicians"
-                    value={selectedCountry.totalPhysicians !== null ? selectedCountry.totalPhysicians.toFixed(1) : null}
-                    unit="per 100k"
-                    accent="#00d4aa"
-                  />
-                  <MetricCard
-                    label="Grads/yr"
-                    value={selectedCountry.medicalGraduates !== null ? selectedCountry.medicalGraduates.toFixed(1) : null}
-                    unit="per 100k"
-                    accent="#4fc3f7"
-                  />
-                  <MetricCard
-                    label="Under 35"
-                    value={selectedCountry.physiciansUnder35 !== null ? selectedCountry.physiciansUnder35.toFixed(1) : null}
-                    unit="per 100k"
-                    accent="#a78bfa"
-                  />
-                  <MetricCard
-                    label="Over 55"
-                    value={selectedCountry.physiciansOver55 !== null ? selectedCountry.physiciansOver55.toFixed(1) : null}
-                    unit="per 100k"
-                    accent="#f97316"
-                  />
-                </div>
-
-                {/* Forecast bars */}
-                <div>
-                  <div className="text-[9px] font-mono tracking-widest uppercase text-zinc-500 mb-3">
-                    Workforce Sustainability Indicators
-                  </div>
-                  <ForecastBar
-                    retirementCliff={selectedCountry.retirementCliffScore}
-                    pipelineRatio={selectedCountry.pipelineRatio}
-                    shortfall10yr={selectedCountry.projectedShortfall10yr}
-                  />
-                </div>
-
-                {/* Radar vs EU avg */}
-                {(() => {
-                  const avgTotal = data.filter(d => d.totalPhysicians).reduce((s,d) => s+d.totalPhysicians!,0) / data.filter(d => d.totalPhysicians).length
-                  const avgCliffR = data.filter(d => d.retirementCliffScore).reduce((s,d) => s+d.retirementCliffScore!,0) / data.filter(d => d.retirementCliffScore).length
-                  const avgPipe = data.filter(d => d.pipelineRatio).reduce((s,d) => s+d.pipelineRatio!,0) / data.filter(d => d.pipelineRatio).length
-                  const radarData = [
-                    { metric: 'Density', country: Math.round((selectedCountry.totalPhysicians ?? 0) / (avgTotal || 1) * 50), eu: 50 },
-                    { metric: 'Pipeline', country: Math.round((selectedCountry.pipelineRatio ?? 0) / (avgPipe || 1) * 50), eu: 50 },
-                    { metric: 'Young Docs', country: Math.round((selectedCountry.physiciansUnder35 ?? 0) / ((selectedCountry.totalPhysicians || 1)) * 100), eu: 25 },
-                    { metric: 'Cliff Risk', country: Math.max(0, 100 - (selectedCountry.retirementCliffScore ?? 50)), eu: 60 },
-                  ]
-                  return (
-                    <div>
-                      <div className="text-[9px] font-mono tracking-widest uppercase text-zinc-500 mb-3">
-                        vs EU Average (normalized)
-                      </div>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <RadarChart data={radarData}>
-                          <PolarGrid stroke="#2a2a3a" />
-                          <PolarAngleAxis
-                            dataKey="metric"
-                            tick={{ fill: '#52525b', fontSize: 9, fontFamily: 'DM Mono' }}
+                      <CartesianGrid
+                        strokeDasharray="2 4"
+                        stroke="#e2e8f0"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="name"
+                        tick={{
+                          fill: '#64748b',
+                          fontSize: 12,
+                          fontFamily: 'Inter',
+                        }}
+                      />
+                      <YAxis
+                        tick={{
+                          fill: '#64748b',
+                          fontSize: 12,
+                          fontFamily: 'Inter',
+                        }}
+                      />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Bar dataKey="cliff" name="% over 55" radius={[6, 6, 0, 0]}>
+                        {cliffChartData.map((d, i) => (
+                          <Cell
+                            key={i}
+                            fill={RISK_COLORS[d.risk] ?? RISK_COLORS.UNKNOWN}
+                            opacity={0.9}
                           />
-                          <Radar name={COUNTRIES[selected]?.name} dataKey="country" stroke="#00d4aa" fill="#00d4aa" fillOpacity={0.15} />
-                          <Radar name="EU Avg" dataKey="eu" stroke="#3f3f5a" fill="#3f3f5a" fillOpacity={0.1} />
-                        </RadarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )
-                })()}
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
 
-                {/* Interpretation */}
-                <div className="border-t border-white/5 pt-4">
-                  <div className="text-[9px] font-mono tracking-widest uppercase text-zinc-500 mb-2">
-                    System Interpretation
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-5">
+                    <h2 className="text-lg font-bold text-slate-900">
+                      Pipeline ratio vs retirement cliff
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Relationship between replacement capacity and retirement
+                      pressure.
+                    </p>
                   </div>
-                  <p className="text-xs font-mono text-zinc-400 leading-relaxed">
-                    {selectedCountry.shortageRisk === 'CRITICAL' &&
-                      `${COUNTRIES[selected]?.name} faces severe workforce sustainability risk. With ${selectedCountry.retirementCliffScore ?? '?'}% of physicians aged over 55 and a pipeline ratio of ${selectedCountry.pipelineRatio?.toFixed(1) ?? '?'}, the system cannot replace retiring physicians at current graduation rates.`}
-                    {selectedCountry.shortageRisk === 'HIGH' &&
-                      `${COUNTRIES[selected]?.name} shows high workforce vulnerability. Retirement wave pressure is significant and graduate pipeline requires strengthening to avoid medium-term shortages.`}
-                    {selectedCountry.shortageRisk === 'MODERATE' &&
-                      `${COUNTRIES[selected]?.name} maintains moderate workforce sustainability. Monitoring of age distribution trends and graduate output is recommended.`}
-                    {selectedCountry.shortageRisk === 'LOW' &&
-                      `${COUNTRIES[selected]?.name} demonstrates strong workforce sustainability with a healthy age distribution and adequate graduate pipeline.`}
-                    {selectedCountry.shortageRisk === 'UNKNOWN' &&
-                      `Insufficient data available for ${COUNTRIES[selected]?.name} to generate a full workforce risk assessment.`}
-                  </p>
+
+                  <ResponsiveContainer width="100%" height={280}>
+                    <ScatterChart
+                      margin={{ top: 10, right: 20, bottom: 10, left: -10 }}
+                    >
+                      <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="cliff"
+                        name="Retirement cliff %"
+                        tick={{
+                          fill: '#64748b',
+                          fontSize: 12,
+                          fontFamily: 'Inter',
+                        }}
+                      />
+                      <YAxis
+                        dataKey="pipeline"
+                        name="Pipeline ratio"
+                        tick={{
+                          fill: '#64748b',
+                          fontSize: 12,
+                          fontFamily: 'Inter',
+                        }}
+                      />
+                      <Tooltip
+                        cursor={{ strokeDasharray: '3 3', stroke: '#94a3b8' }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null
+                          const d = payload[0].payload
+
+                          return (
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-lg">
+                              <div className="mb-1 font-bold text-slate-900">
+                                {d.name}
+                              </div>
+                              <div className="text-slate-500">
+                                Cliff: {d.cliff?.toFixed(1)}%
+                              </div>
+                              <div className="text-slate-500">
+                                Pipeline: {d.pipeline?.toFixed(1)}
+                              </div>
+                            </div>
+                          )
+                        }}
+                      />
+                      <Scatter data={cliffChartData}>
+                        {cliffChartData.map((d, i) => (
+                          <Cell
+                            key={i}
+                            fill={RISK_COLORS[d.risk] ?? RISK_COLORS.UNKNOWN}
+                          />
+                        ))}
+                      </Scatter>
+                    </ScatterChart>
+                  </ResponsiveContainer>
+
+                  <div className="mt-4 flex flex-wrap gap-5">
+                    {['CRITICAL', 'HIGH', 'MODERATE', 'LOW'].map((r) => (
+                      <div
+                        key={r}
+                        className="flex items-center text-sm font-medium text-slate-500"
+                      >
+                        <RiskDot risk={r} />
+                        {r.charAt(0) + r.slice(1).toLowerCase()}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* ── Methodology Footer ─────────────────────────────────── */}
-          <div className="border-t border-white/5 pt-6 pb-8">
-            <div className="text-[9px] font-mono tracking-widest text-zinc-700 uppercase mb-3">Methodology</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[10px] font-mono text-zinc-600 leading-relaxed">
-              <div>
-                <span className="text-zinc-500">Retirement Cliff Score</span><br />
-                Percentage of practising physicians aged 55 or older. Above 40% indicates a high-risk retirement wave within 10 years.
+          {selected && selectedCountry && (
+            <aside className="animate-fade-up rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-6 border-b border-slate-200 pb-5">
+                <div className="mb-3 flex items-start justify-between gap-4">
+                  <div>
+                    <div className="mb-1 text-sm font-medium text-slate-400">
+                      {COUNTRIES[selected]?.region ?? ''} Europe
+                    </div>
+                    <h2 className="text-3xl font-bold tracking-tight text-slate-950">
+                      {COUNTRIES[selected]?.name ?? selected}
+                    </h2>
+                  </div>
+
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <StatusBadge risk={selectedCountry.shortageRisk} />
               </div>
-              <div>
-                <span className="text-zinc-500">Pipeline Ratio</span><br />
-                Annual medical graduates per 100 current physicians. Below 5 indicates insufficient replacement capacity.
+
+              <div className="mb-6 grid grid-cols-2 gap-3">
+                <MetricCard
+                  label="Physicians"
+                  value={
+                    selectedCountry.totalPhysicians !== null
+                      ? selectedCountry.totalPhysicians.toFixed(1)
+                      : null
+                  }
+                  unit="per 100k"
+                  accent="#2563eb"
+                />
+                <MetricCard
+                  label="Graduates"
+                  value={
+                    selectedCountry.medicalGraduates !== null
+                      ? selectedCountry.medicalGraduates.toFixed(1)
+                      : null
+                  }
+                  unit="per 100k"
+                  accent="#0891b2"
+                />
+                <MetricCard
+                  label="Under 35"
+                  value={
+                    selectedCountry.physiciansUnder35 !== null
+                      ? selectedCountry.physiciansUnder35.toFixed(1)
+                      : null
+                  }
+                  unit="per 100k"
+                  accent="#7c3aed"
+                />
+                <MetricCard
+                  label="Over 55"
+                  value={
+                    selectedCountry.physiciansOver55 !== null
+                      ? selectedCountry.physiciansOver55.toFixed(1)
+                      : null
+                  }
+                  unit="per 100k"
+                  accent="#ea580c"
+                />
               </div>
-              <div>
-                <span className="text-zinc-500">Data Source</span><br />
-                Eurostat Dissemination API. Datasets: hlth_rs_phys, hlth_rs_physage, hlth_rs_physcases. Refreshed weekly via cron.
+
+              <div className="mb-6">
+                <h3 className="mb-3 text-base font-bold text-slate-900">
+                  Workforce sustainability indicators
+                </h3>
+                <ForecastBar
+                  retirementCliff={selectedCountry.retirementCliffScore}
+                  pipelineRatio={selectedCountry.pipelineRatio}
+                  shortfall10yr={selectedCountry.projectedShortfall10yr}
+                />
               </div>
+
+              {(() => {
+                const totalRows = data.filter((d) => d.totalPhysicians)
+                const cliffRows = data.filter((d) => d.retirementCliffScore)
+                const pipeRows = data.filter((d) => d.pipelineRatio)
+
+                const avgTotal =
+                  totalRows.reduce((s, d) => s + d.totalPhysicians!, 0) /
+                  totalRows.length
+
+                const avgCliffR =
+                  cliffRows.reduce((s, d) => s + d.retirementCliffScore!, 0) /
+                  cliffRows.length
+
+                const avgPipe =
+                  pipeRows.reduce((s, d) => s + d.pipelineRatio!, 0) /
+                  pipeRows.length
+
+                const radarData = [
+                  {
+                    metric: 'Density',
+                    country: Math.round(
+                      ((selectedCountry.totalPhysicians ?? 0) /
+                        (avgTotal || 1)) *
+                        50
+                    ),
+                    eu: 50,
+                  },
+                  {
+                    metric: 'Pipeline',
+                    country: Math.round(
+                      ((selectedCountry.pipelineRatio ?? 0) / (avgPipe || 1)) *
+                        50
+                    ),
+                    eu: 50,
+                  },
+                  {
+                    metric: 'Young docs',
+                    country: Math.round(
+                      ((selectedCountry.physiciansUnder35 ?? 0) /
+                        (selectedCountry.totalPhysicians || 1)) *
+                        100
+                    ),
+                    eu: 25,
+                  },
+                  {
+                    metric: 'Cliff risk',
+                    country: Math.max(
+                      0,
+                      100 - (selectedCountry.retirementCliffScore ?? 50)
+                    ),
+                    eu: Math.max(0, 100 - (avgCliffR || 40)),
+                  },
+                ]
+
+                return (
+                  <div className="mb-6">
+                    <h3 className="mb-3 text-base font-bold text-slate-900">
+                      Compared with EU average
+                    </h3>
+
+                    <ResponsiveContainer width="100%" height={200}>
+                      <RadarChart data={radarData}>
+                        <PolarGrid stroke="#e2e8f0" />
+                        <PolarAngleAxis
+                          dataKey="metric"
+                          tick={{
+                            fill: '#64748b',
+                            fontSize: 12,
+                            fontFamily: 'Inter',
+                          }}
+                        />
+                        <Radar
+                          name={COUNTRIES[selected]?.name}
+                          dataKey="country"
+                          stroke="#2563eb"
+                          fill="#2563eb"
+                          fillOpacity={0.14}
+                        />
+                        <Radar
+                          name="EU average"
+                          dataKey="eu"
+                          stroke="#94a3b8"
+                          fill="#94a3b8"
+                          fillOpacity={0.12}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )
+              })()}
+
+              <div className="border-t border-slate-200 pt-5">
+                <h3 className="mb-2 text-base font-bold text-slate-900">
+                  System interpretation
+                </h3>
+                <p className="text-sm leading-7 text-slate-600">
+                  {selectedCountry.shortageRisk === 'CRITICAL' &&
+                    `${
+                      COUNTRIES[selected]?.name
+                    } faces severe workforce sustainability risk. With ${
+                      selectedCountry.retirementCliffScore ?? '?'
+                    }% of physicians aged over 55 and a pipeline ratio of ${
+                      selectedCountry.pipelineRatio?.toFixed(1) ?? '?'
+                    }, the system cannot replace retiring physicians at current graduation rates.`}
+
+                  {selectedCountry.shortageRisk === 'HIGH' &&
+                    `${
+                      COUNTRIES[selected]?.name
+                    } shows high workforce vulnerability. Retirement wave pressure is significant and graduate pipeline capacity requires strengthening to avoid medium-term shortages.`}
+
+                  {selectedCountry.shortageRisk === 'MODERATE' &&
+                    `${
+                      COUNTRIES[selected]?.name
+                    } maintains moderate workforce sustainability. Continued monitoring of age distribution trends and graduate output is recommended.`}
+
+                  {selectedCountry.shortageRisk === 'LOW' &&
+                    `${
+                      COUNTRIES[selected]?.name
+                    } demonstrates strong workforce sustainability with a healthier age distribution and adequate graduate pipeline.`}
+
+                  {selectedCountry.shortageRisk === 'UNKNOWN' &&
+                    `Insufficient data is available for ${
+                      COUNTRIES[selected]?.name
+                    } to generate a full workforce risk assessment.`}
+                </p>
+              </div>
+            </aside>
+          )}
+        </section>
+
+        <footer className="border-t border-slate-200 pb-10 pt-8">
+          <h2 className="mb-4 text-base font-bold text-slate-900">
+            Methodology
+          </h2>
+
+          <div className="grid grid-cols-1 gap-6 text-sm leading-7 text-slate-600 md:grid-cols-3">
+            <div>
+              <span className="font-semibold text-slate-900">
+                Retirement cliff score
+              </span>
+              <br />
+              Percentage of practising physicians aged 55 or older. Values above
+              40% indicate a high-risk retirement wave within 10 years.
+            </div>
+
+            <div>
+              <span className="font-semibold text-slate-900">
+                Pipeline ratio
+              </span>
+              <br />
+              Annual medical graduates per 100 current physicians. Values below
+              5 indicate insufficient replacement capacity.
+            </div>
+
+            <div>
+              <span className="font-semibold text-slate-900">Data source</span>
+              <br />
+              Eurostat Dissemination API. Datasets include physician density,
+              physician age structure, and medical graduate indicators.
             </div>
           </div>
-
-        </main>
-      </div>
+        </footer>
+      </main>
     </div>
   )
 }
